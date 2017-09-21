@@ -232,14 +232,12 @@ class Jenkins
     }
 
     /**
-     * @param       $jobName
+     * @param string $jobName
      * @param array $parameters
      *
-     * @return bool
-     * @internal param array $extraParameters
-     *
+     * @return int queue id if available or 0
      */
-    public function launchJob($jobName, $parameters = array())
+    public function launchJob($jobName, array $parameters = array())
     {
         if (0 === count($parameters)) {
             $url = sprintf('%s/job/%s/build', $this->baseUrl, $jobName);
@@ -249,8 +247,10 @@ class Jenkins
 
         $curl = curl_init($url);
 
+        curl_setopt($curl, \CURLOPT_HEADER, 1);
+        curl_setopt($curl, \CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($curl, \CURLOPT_POST, 1);
-        curl_setopt($curl, \CURLOPT_POSTFIELDS, http_build_query($parameters));
+        curl_setopt($curl, \CURLOPT_POSTFIELDS, $parameters);
 
         $headers = array();
 
@@ -260,11 +260,18 @@ class Jenkins
 
         curl_setopt($curl, \CURLOPT_HTTPHEADER, $headers);
 
-        curl_exec($curl);
+        $response = curl_exec($curl);
 
         $this->validateCurl($curl, sprintf('Error trying to launch job "%s" (%s)', $jobName, $url));
 
-        return true;
+        $responseHeaders = substr($response, 0, curl_getinfo($curl, CURLINFO_HEADER_SIZE));
+        $responseHeaders = $this->parseHttpHeaders($responseHeaders);
+
+        if (isset($responseHeaders['location']) && preg_match('~/queue/item/(\\d+)/~i', $responseHeaders['location'], $match)) {
+            return (int) $match[1];
+        }
+
+        return 0;
     }
 
     /**
@@ -415,7 +422,7 @@ class Jenkins
      * @return Jenkins\Build
      * @throws \RuntimeException
      */
-    public function getBuild($job, $buildId, $tree = 'actions[parameters,parameters[name,value]],result,duration,timestamp,number,url,estimatedDuration,builtOn')
+    public function getBuild($job, $buildId, $tree = 'actions[parameters,parameters[name,value]],result,duration,timestamp,number,url,estimatedDuration,builtOn,queueId')
     {
         if ($tree !== null) {
             $tree = sprintf('?tree=%s', $tree);
@@ -836,5 +843,42 @@ class Jenkins
         if ($info['http_code'] === 403) {
             throw new \RuntimeException(sprintf('Access Denied [HTTP status code 403] to %s"', $info['url']));
         }
+    }
+
+    /**
+     * @param string $headers
+     *
+     * @return array
+     */
+    private function parseHttpHeaders($headers)
+    {
+        $parsed = [];
+
+        $headers = explode("\n", $headers);
+
+        foreach ($headers as $header) {
+            $header = explode(':', $header, 2);
+
+            // skip status line
+            if (!isset($header[1])) {
+                continue;
+            }
+
+            $name = strtolower($header[0]);
+            $value = trim($header[1]);
+
+            if (!array_key_exists($name, $parsed)) {
+                $parsed[$name] = $value;
+            } elseif (!is_array($parsed[$name])) {
+                $parsed[$name] = [
+                    $parsed[$name],
+                    $value,
+                ];
+            } else {
+                $parsed[$name][] = $value;
+            }
+        }
+
+        return $parsed;
     }
 }

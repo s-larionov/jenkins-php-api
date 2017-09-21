@@ -104,6 +104,14 @@ class Build
     }
 
     /**
+     * @return int
+     */
+    public function getQueueId()
+    {
+        return $this->build->queueId;
+    }
+
+    /**
      * @return null|int
      */
     public function getProgress()
@@ -117,7 +125,7 @@ class Build
     }
 
     /**
-     * @return float|null
+     * @return float|int|null
      */
     public function getEstimatedDuration()
     {
@@ -236,7 +244,7 @@ class Build
     /**
      * @param Jenkins $jenkins
      *
-     * @return Job
+     * @return $this
      */
     public function setJenkins(Jenkins $jenkins)
     {
