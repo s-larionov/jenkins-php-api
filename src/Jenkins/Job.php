@@ -41,6 +41,20 @@ class Job
         return $builds;
     }
 
+    /**
+     * @return int[]
+     */
+    public function getBuildNumbers()
+    {
+        $numbers = array();
+
+        foreach ($this->job->builds as $build) {
+            $numbers[] = $build->number;
+        }
+
+        return $numbers;
+    }
+
 
     /**
      * @param int $buildId
